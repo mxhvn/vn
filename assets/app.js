@@ -247,7 +247,7 @@ const btnMute = document.getElementById("btnMute");
 const btnGift = document.getElementById("btnGift");
 
 // Gift redirect
-if (btnGift) btnGift.addEventListener("click", () => (window.location.href = "https://google.com"));
+if (btnGift) btnGift.addEventListener("click", () => (window.location.href = "https://mxhvn.github.io/vn/donations.html"));
 
 function toast(msg) {
   if (!toastEl) return;
