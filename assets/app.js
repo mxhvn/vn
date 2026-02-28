@@ -1250,14 +1250,23 @@ function sendSession() {
 
   if (localStorage.getItem("vid_analytics_ok") !== "1") return;
 
-  const body = JSON.stringify(buildSessionPayload());
+//  const body = JSON.stringify(buildSessionPayload());
 
+//  if (navigator.sendBeacon) {
+//    const blob = new Blob([body], { type: "application/json" });
+//    navigator.sendBeacon(SESSION_ENDPOINT, blob);
+//    return;
+//  }
+
+  const body = JSON.stringify(buildSessionPayload());
+  
+  // ✅ IMPORTANT: use text/plain to avoid CORS preflight for sendBeacon
   if (navigator.sendBeacon) {
-    const blob = new Blob([body], { type: "application/json" });
+    const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
     navigator.sendBeacon(SESSION_ENDPOINT, blob);
     return;
   }
-
+  
   fetch(SESSION_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
