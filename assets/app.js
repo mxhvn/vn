@@ -1,5 +1,5 @@
 /**
- * Seedance — FULL app.js (Tap Hint UI + Auto-Next)
+ * Seedance — FULL app.js (Tap Hint UI + Auto-Next) — Optimized for desktop smooth scroll
  * - Tap while playing => show controls briefly then auto-hide
  * - Toggle mute => hide controls immediately
  * - Pause => show controls (fade in) and keep visible
@@ -7,7 +7,9 @@
  * - Send session analytics on end
  * - Auto-next: when video ended => scroll to next slide (no swipe)
  *
- * NOTE: auto-next needs NO loop. So we REMOVE "loop" on <video>.
+ * Optimizations:
+ * - Desktop "phone" wrapper: stable layout, video stays absolute (less reflow)
+ * - Pause only previous active video instead of pausing all videos every intersect
  */
 
 const WORKER_BASE = "https://seedance.testmail12071997.workers.dev";
@@ -981,7 +983,7 @@ function ensureConsent() {
 
   bar.querySelector("#vidOk").addEventListener("click", () => {
     localStorage.setItem(key, "1");
-    sendQuickEvent("consent_ok"); // ✅ vào là có log
+    sendQuickEvent("consent_ok");
     bar.remove();
   });
 
@@ -1004,6 +1006,7 @@ let observer = null;
 let globalMuted = true;
 let lastTapAt = 0;
 let hintTimer = null;
+let activeVideoEl = null; // ✅ optimization: only pause previous active
 
 function showControls() {
   if (btnMute) btnMute.classList.remove("is-hidden");
@@ -1046,11 +1049,11 @@ if (btnMute) {
   btnMute.addEventListener("click", (e) => {
     e.stopPropagation();
     setMuteAll(!globalMuted);
-    hideControls(); // ✅ bấm mute/unmute ẩn ngay
-  });
+    hideControls();
+  }, { passive: false });
 }
 if (btnGift) {
-  btnGift.addEventListener("click", (e) => e.stopPropagation());
+  btnGift.addEventListener("click", (e) => e.stopPropagation(), { passive: true });
 }
 
 // ---------- Auto-next ----------
@@ -1064,18 +1067,14 @@ function goNextFromSlide(slideEl) {
 // ---------- Render ----------
 function attachVideoSignals(video, slideEl) {
   video.addEventListener("pause", () => {
-    // pause => show controls and keep visible
     showControls();
   });
 
   video.addEventListener("play", () => {
-    // playing => keep UI quiet (hidden), but allow tap-hint
     hideControls();
   });
 
-  // ✅ auto-next when video ended
   video.addEventListener("ended", () => {
-    // only auto-next if this slide is still the active one
     if (session.activeVideoId !== slideEl?.dataset?.id) return;
     goNextFromSlide(slideEl);
   });
@@ -1091,8 +1090,13 @@ function render() {
     s.dataset.id = item.id;
     s.dataset.title = item.title;
 
+    // ✅ desktop uses .phone wrapper; mobile unaffected
     // ✅ REMOVE loop so "ended" will fire for auto-next
-    s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
+    s.innerHTML = `
+      <div class="phone">
+        <video playsinline muted preload="metadata" src="${item.url}"></video>
+      </div>
+    `;
 
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
@@ -1119,7 +1123,7 @@ function render() {
       } else {
         showControlsBrief(1600);
       }
-    });
+    }, { passive: true });
 
     feedEl.appendChild(s);
   });
@@ -1138,16 +1142,17 @@ function setupObserver() {
   if (observer) observer.disconnect();
 
   observer = new IntersectionObserver((entries) => {
-    entries.forEach(async (entry) => {
+    for (const entry of entries) {
       const slide = entry.target;
       const video = slide.querySelector("video");
-      if (!video) return;
+      if (!video) continue;
 
       if (entry.isIntersecting) {
-        // pause others
-        document.querySelectorAll(".slide video").forEach(v => {
-          if (v !== video) v.pause();
-        });
+        // ✅ Optimization: pause only previous active video (no querySelectorAll loop)
+        if (activeVideoEl && activeVideoEl !== video) {
+          activeVideoEl.pause();
+        }
+        activeVideoEl = video;
 
         // update active + seen + caption
         const id = slide.dataset.id || null;
@@ -1158,17 +1163,24 @@ function setupObserver() {
         if (captionEl) captionEl.textContent = slide.dataset.title || "";
 
         // autoplay
-        try {
-          video.muted = globalMuted;
-          await video.play();
-          hideControls();
-        } catch {
-          showControls();
-        }
+        (async () => {
+          try {
+            video.muted = globalMuted;
+            await video.play();
+            hideControls();
+          } catch {
+            showControls();
+          }
+        })();
       } else {
-        video.pause();
+        // only pause if this is the active video element
+        if (video === activeVideoEl) {
+          video.pause();
+        } else {
+          video.pause();
+        }
       }
-    });
+    }
   }, { root: feedEl, threshold: 0.66 });
 
   document.querySelectorAll(".slide").forEach(s => observer.observe(s));
