@@ -1,10 +1,11 @@
 /**
  * Seedance — FULL app.js (Tap Hint UI + Auto-Next + Analytics + Fingerprint light)
  * ✅ UPDATE:
- * - Video ID dựa vào _nc_gid (không dùng hash)
+ * - Video ID dựa vào _nc_gid (không dùng video-hash)
  * - RAW_LIST vẫn là string[]
- * - FEED shuffle thoải mái nhưng ID vẫn định vị được
+ * - FEED shuffle thoải mái nhưng ID vẫn định vị được (vid_<nc_gid>)
  * - topWatch gửi kèm url/title để đọc Telegram dễ
+ * - ✅ GIỮ LẠI FP: như code ban đầu => tạo fp_light_hash sau consent, lưu localStorage, gửi kèm Session Summary
  *
  * CORS note:
  * - summary sendBeacon dùng text/plain để hạn chế preflight
@@ -13,6 +14,7 @@
 const WORKER_BASE = "https://seedance.testmail12071997.workers.dev";
 const SESSION_ENDPOINT = `${WORKER_BASE}/api/session`;
 
+/* KEEP YOUR VIDEO URLS */
 /* KEEP YOUR VIDEO URLS */
 const RAW_LIST = [
   "https://video.fsgn24-1.fna.fbcdn.net/o1/v/t2/f2/m366/AQNgDyDGsGQ4f8p7FvufqTwLe0eeN3WRVL5UC2VgAAUdczWvlK6yXhfaXAR7TA96BlcqypycXHmwRMRQ-50jdWIUjJdIH4AKHL8Hrz4gbqn1NQ.mp4?_nc_cat=109&_nc_oc=Adlc5l4P98qlQB_0apKMg7WHKwFsMvlvS81EHGjAH72Y9gms5TbKKklZDCCQR6pkrXw&_nc_sid=5e9851&_nc_ht=video.fsgn24-1.fna.fbcdn.net&_nc_ohc=UdknNt-qHqEQ7kNvwHpLxJM&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjU1ODk2ODAxMzk0MDM2MiwiYXNzZXRfYWdlX2RheXMiOjE2MSwidmlfdXNlY2FzZV9pZCI6MTAxMjEsImR1cmF0aW9uX3MiOjExLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=b86baca8c9271a16&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC85QjRBMjc0MjJCMkNGODNEQzc3RUNFQzBFQThBOTc5RV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDhFQTlEODlDN0Y0QTJERUYzQjZGNkY2QjMyQjk1X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaUmsuenJj-ARUCKAJDMywXQCeZmZmZmZoYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZZKeAQA&_nc_gid=QNOWT9q0uLgtDF8n51b65Q&_nc_ss=8&_nc_zt=28&oh=00_Aftz-erh687YGC7hUQ7juXdV8Ls0cc5Ie9BJ4R0I_qXQog&oe=69A820D3&bitrate=1185725&tag=dash_h264-basic-gen2_720p",
@@ -260,14 +262,11 @@ function muteIcon(muted) {
 /* ===========================
    Video ID based on _nc_gid
    =========================== */
-
-/** Lấy query param từ URL an toàn */
 function getQueryParam(url, key) {
   try {
     const u = new URL(url);
     return u.searchParams.get(key) || "";
   } catch {
-    // fallback regex nếu URL có ký tự lạ
     const m = String(url).match(new RegExp(`[?&]${key}=([^&]+)`));
     return m ? decodeURIComponent(m[1]) : "";
   }
@@ -275,10 +274,10 @@ function getQueryParam(url, key) {
 
 /**
  * ID ưu tiên:
- * 1) _nc_gid
- * 2) oe (hạn dùng) -> vẫn khá dễ nhìn
- * 3) _nc_ohc (token) -> fallback
- * 4) cuối URL (ngắn) -> fallback cuối cùng
+ * 1) _nc_gid => vid_<gid>
+ * 2) oe
+ * 3) _nc_ohc
+ * 4) fallback cuối url
  */
 function stableVideoIdFromUrl(url) {
   const gid = getQueryParam(url, "_nc_gid");
@@ -290,13 +289,13 @@ function stableVideoIdFromUrl(url) {
   const ohc = getQueryParam(url, "_nc_ohc");
   if (ohc) return `vid_ohc_${ohc}`;
 
-  // fallback ngắn gọn
   const s = String(url);
   return `vid_${s.slice(-12).replace(/[^a-zA-Z0-9_]/g, "") || "unknown"}`;
 }
 
 /* ===========================
    Fingerprint (LIGHT) — after consent only
+   ✅ GIỮ LẠI FP: bằng fp_light_hash (như code ban đầu)
    =========================== */
 async function getUAHighEntropy() {
   try {
@@ -370,10 +369,27 @@ function getOrientation() {
   }
 }
 
+function stableStringify(obj) {
+  const allKeys = [];
+  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
+  allKeys.sort();
+  return JSON.stringify(obj, allKeys);
+}
+
+async function sha256Base64Url(input) {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
 async function buildFingerprintLight() {
   const uaCh = await getUAHighEntropy();
 
   const fp = {
+    // keep enough entropy but still "light"
     ua: (navigator.userAgent || "").slice(0, 220),
     languages: (navigator.languages || [navigator.language || ""]).slice(0, 6),
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
@@ -393,25 +409,28 @@ async function buildFingerprintLight() {
     orientation: getOrientation(),
     prefs: getPrefs(),
     net: getNetworkInfo(),
-    uaCh
+
+    uaCh // may be null
   };
 
-  // Bạn nói không cần hash nữa → chỉ gửi “fp_light” (nhẹ) hoặc chỉ gửi vài field tuỳ ý.
-  // Để gọn, mình gửi bản rút gọn:
-  return {
-    fp_light: {
-      tz: fp.tz,
-      tzOffsetMin: fp.tzOffsetMin,
-      languages: fp.languages,
-      platform: fp.platform,
-      deviceMemory: fp.deviceMemory,
-      hardwareConcurrency: fp.hardwareConcurrency,
-      screen: fp.screen,
-      viewport: fp.viewport,
-      net: fp.net,
-      uaCh: fp.uaCh
-    }
+  // ✅ GIỮ LẠI FP: đúng kiểu "hash" như ban đầu
+  const fp_light_hash = await sha256Base64Url(stableStringify(fp));
+
+  // (tuỳ chọn) gửi kèm bản rút gọn để debug / enrich thêm
+  const fp_light = {
+    tz: fp.tz,
+    tzOffsetMin: fp.tzOffsetMin,
+    languages: fp.languages,
+    platform: fp.platform,
+    deviceMemory: fp.deviceMemory,
+    hardwareConcurrency: fp.hardwareConcurrency,
+    screen: fp.screen,
+    viewport: fp.viewport,
+    net: fp.net,
+    uaCh: fp.uaCh
   };
+
+  return { fp_light, fp_light_hash };
 }
 
 /* ===========================
@@ -444,6 +463,7 @@ function getUID() {
   }
   return v;
 }
+
 function getOrCreateSessionId() {
   const key = "vid_session_id";
   let sid = sessionStorage.getItem(key);
@@ -478,7 +498,8 @@ const session = {
   screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
   ua: (navigator.userAgent || "").slice(0, 220),
 
-  metaById: {} // { [feedId]: { url, title, nc_gid } }
+  // { [feedId]: { url, title, nc_gid } }
+  metaById: {}
 };
 
 function markVideoSeen(feedId) {
@@ -531,7 +552,7 @@ function sendQuickEvent(eventName, extra = null) {
 }
 
 /* ===========================
-   Consent Like
+   Consent Like (after consent => build FP + store hash)
    =========================== */
 function ensureConsent() {
   const key = "vid_analytics_ok";
@@ -573,9 +594,11 @@ function ensureConsent() {
   bar.querySelector("#vidOk").addEventListener("click", async () => {
     localStorage.setItem(key, "1");
 
+    // ✅ FP light AFTER consent + store hash for later summary
     let fpPack = null;
     try {
       fpPack = await buildFingerprintLight();
+      if (fpPack?.fp_light_hash) localStorage.setItem("fp_light_hash", fpPack.fp_light_hash);
     } catch {}
 
     sendQuickEvent("consent_ok", fpPack);
@@ -596,7 +619,7 @@ function buildFeedFromRawList() {
 
   const items = urls.map((url) => {
     const id = stableVideoIdFromUrl(url);          // ✅ vid_<nc_gid>
-    const nc_gid = getQueryParam(url, "_nc_gid");  // để debug/telegram nếu muốn
+    const nc_gid = getQueryParam(url, "_nc_gid");  // optional
     return { id, url, title: pickRandom(TITLE_BANK), nc_gid };
   });
 
@@ -695,7 +718,6 @@ function render() {
 
     s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
 
-    // meta map (để summary đọc ra URL chính xác)
     session.metaById[item.id] = {
       url: item.url,
       title: item.title,
@@ -705,9 +727,6 @@ function render() {
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
 
-    // Click behavior:
-    // - paused => play
-    // - playing => 1 tap show hint, 2 tap nhanh pause
     s.addEventListener("click", () => {
       const video = s.querySelector("video");
       if (!video) return;
@@ -777,6 +796,7 @@ function setupObserver() {
 
 /* ===========================
    Send session summary (after consent only)
+   ✅ includes fp_light_hash so Telegram shows "FP: ..."
    =========================== */
 function buildSessionPayload() {
   const endedAt = now();
@@ -789,13 +809,15 @@ function buildSessionPayload() {
     .map(([feedId, ms]) => {
       const meta = session.metaById?.[feedId] || {};
       return {
-        feedId,                // vid_<nc_gid>
+        feedId,               // vid_<nc_gid>
         ms,
         nc_gid: meta.nc_gid || "",
         url: meta.url || "",
         title: meta.title || ""
       };
     });
+
+  const fp_light_hash = localStorage.getItem("fp_light_hash") || "";
 
   return {
     sid: session.sid,
@@ -812,7 +834,10 @@ function buildSessionPayload() {
     lang: session.lang,
     tz: session.tz,
     screen: session.screen,
-    ua: session.ua
+    ua: session.ua,
+
+    // ✅ keep FP like old code
+    fp_light_hash
   };
 }
 
@@ -825,6 +850,7 @@ function sendSession() {
 
   const body = JSON.stringify(buildSessionPayload());
 
+  // ✅ avoid preflight
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
     navigator.sendBeacon(SESSION_ENDPOINT, blob);
