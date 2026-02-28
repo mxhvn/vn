@@ -70,7 +70,7 @@ body{
   height:100%;
   overflow-y:auto;
   overflow-x:hidden !important;
-  scroll-snap-type: y mandatory; /* mobile: snap mạnh */
+  scroll-snap-type: y mandatory;
   -webkit-overflow-scrolling: touch;
   background:#000;
 }
@@ -82,24 +82,12 @@ body{
   background:#000;
   overflow:hidden;
 }
-
-/* Default (mobile): full-bleed TikTok cover */
-
-/* Phone wrapper: always fills slide (mobile & desktop base) */
-.phone{
+.slide video{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
-}
-
-/* Default (mobile): full-bleed TikTok cover */
-.phone video{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit: cover;
+  object-fit: cover; /* TikTok style */
   background:#000;
 }
 .slide::after{
@@ -107,10 +95,7 @@ body{
   position:absolute;
   inset:0;
   pointer-events:none;
-  background: radial-gradient(120% 80% at 50% 30%,
-    rgba(0,0,0,0) 0%,
-    rgba(0,0,0,.32) 55%,
-    rgba(0,0,0,.72) 100%);
+  background: radial-gradient(120% 80% at 50% 30%, rgba(0,0,0,0) 0%, rgba(0,0,0,.32) 55%, rgba(0,0,0,.72) 100%);
 }
 
 /* MUTE FAB */
@@ -195,52 +180,10 @@ body{
   }
 }
 
-/* =========================
-   Desktop TikTok frame (center) — optimized smooth scroll
-   - Uses .phone wrapper (stable layout)
-   - Snap is lighter on desktop
-   - Gradient overlay applies to phone only (cheaper repaint)
-   ========================= */
+/* Desktop: giữ đúng tỉ lệ video (không crop) */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine){
-  .feed{
-    scroll-snap-type: y proximity; /* wheel/trackpad mượt hơn */
-  }
-
-  .slide{
-    display:grid;
-    place-items:center;
-  }
-
-  .phone{
-    position: relative;
-    width: min(420px, 92vw);
-    height: 100svh;
-    background:#000;
-    overflow:hidden;
-    contain: layout paint;
-  }
-
-  /* Desktop: video fit inside phone, no crop */
-  .phone video{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
+  .slide video{
     object-fit: contain;
     background:#000;
-  }
-
-  /* Remove heavy full-slide overlay; use phone overlay instead */
-  .slide::after{ display:none; }
-
-  .phone::after{
-    content:"";
-    position:absolute;
-    inset:0;
-    pointer-events:none;
-    background: radial-gradient(120% 80% at 50% 30%,
-      rgba(0,0,0,0) 0%,
-      rgba(0,0,0,.22) 55%,
-      rgba(0,0,0,.55) 100%);
   }
 }
