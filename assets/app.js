@@ -1,22 +1,17 @@
 /**
- * Seedance — FULL app.js (Tap Hint UI + Auto-Next + Analytics + Fingerprint light)
- * - Tap while playing => show controls briefly then auto-hide
- * - Toggle mute => hide controls immediately
- * - Pause => show controls (fade in) and keep visible
- * - Consent Like => send quick event immediately ("consent_ok") WITH fingerprint light
- * - Send session analytics on end (sendBeacon text/plain to avoid preflight)
- * - Auto-next: when video ended => scroll to next slide (no swipe)
- *
- * ✅ IMPORTANT UPDATE:
- * - RAW_LIST giữ nguyên dạng string[] (KHÔNG cần thêm id)
- * - FEED được build với ID ỔN ĐỊNH theo URL (hash) => dù shuffle vẫn nhận diện chính xác video
- * - topWatch gửi kèm url/title để đọc summary dễ hơn
+ * Seedance — app.js (CSS-driven)
+ * - No layout hacks: app.css controls UI/scroll/video fit
+ * - Tap hint uses .is-hidden class only
+ * - Auto-next by scrollIntoView (snap will handle)
+ * - Analytics after consent:
+ *    - consent_ok via sendBeacon(text/plain) to avoid preflight
+ *    - session summary via sendBeacon(text/plain)
+ * - Identify video precisely even with shuffle: send url/title in topWatch
  */
 
 const WORKER_BASE = "https://seedance.testmail12071997.workers.dev";
 const SESSION_ENDPOINT = `${WORKER_BASE}/api/session`;
 
-/* KEEP YOUR VIDEO URLS */
 const RAW_LIST = [
   "https://video.fsgn24-1.fna.fbcdn.net/o1/v/t2/f2/m366/AQNgDyDGsGQ4f8p7FvufqTwLe0eeN3WRVL5UC2VgAAUdczWvlK6yXhfaXAR7TA96BlcqypycXHmwRMRQ-50jdWIUjJdIH4AKHL8Hrz4gbqn1NQ.mp4?_nc_cat=109&_nc_oc=Adlc5l4P98qlQB_0apKMg7WHKwFsMvlvS81EHGjAH72Y9gms5TbKKklZDCCQR6pkrXw&_nc_sid=5e9851&_nc_ht=video.fsgn24-1.fna.fbcdn.net&_nc_ohc=UdknNt-qHqEQ7kNvwHpLxJM&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuNzIwLmRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHAiLCJ4cHZfYXNzZXRfaWQiOjU1ODk2ODAxMzk0MDM2MiwiYXNzZXRfYWdlX2RheXMiOjE2MSwidmlfdXNlY2FzZV9pZCI6MTAxMjEsImR1cmF0aW9uX3MiOjExLCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=b86baca8c9271a16&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC85QjRBMjc0MjJCMkNGODNEQzc3RUNFQzBFQThBOTc5RV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzdBNDhFQTlEODlDN0Y0QTJERUYzQjZGNkY2QjMyQjk1X2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaUmsuenJj-ARUCKAJDMywXQCeZmZmZmZoYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZZKeAQA&_nc_gid=QNOWT9q0uLgtDF8n51b65Q&_nc_ss=8&_nc_zt=28&oh=00_Aftz-erh687YGC7hUQ7juXdV8Ls0cc5Ie9BJ4R0I_qXQog&oe=69A820D3&bitrate=1185725&tag=dash_h264-basic-gen2_720p",
   "https://video.fsgn5-8.fna.fbcdn.net/o1/v/t2/f2/m366/AQO6lpZgqOBK7EnLbvHZ51nOiGFAcmNauXslV5o6Ke4A87Qb1uf77U70W6T2mcl2p3SpaR3_kSWpiw_u0KWonS13mXUFtGqSSWtxfNKzneG7YQ.mp4?_nc_cat=109&_nc_oc=Adn7s-KXhTTHkS-vMtFINpDTOnNtpLQOWDMw6MgS7oW2c9fpUQv5FboMV9USLQBz8zc&_nc_sid=5e9851&_nc_ht=video.fsgn5-8.fna.fbcdn.net&_nc_ohc=eYwGyVHq5XQQ7kNvwFek_C9&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMTI4MC5kYXNoX2gyNjQtYmFzaWMtZ2VuMl83MjBwIiwieHB2X2Fzc2V0X2lkIjoxMTQxNTU4NjM3NzUzNDYyLCJhc3NldF9hZ2VfZGF5cyI6MzcxLCJ2aV91c2VjYXNlX2lkIjoxMDEyMSwiZHVyYXRpb25fcyI6MTksInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=f55280edb6310985&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9FOTRENjI1MzA5ODA5NzlFREI0ODc0NkQ5QzU1MjlBQ19tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhg6cGFzc3Rocm91Z2hfZXZlcnN0b3JlL0dLN1JyUnpiUHJvdnBoSUNBR3hhc0N0YTVlZ3VidjRHQUFBRhUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbs0b_Ruo-HBBUCKAJDMywXQDNmZmZmZmYYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUCZZKeAQA&_nc_gid=HhpPeZh_kXLePaOAqBDvLQ&_nc_ss=8&_nc_zt=28&oh=00_Afu3wzbLOkPBXQ5DHOG_sUOXDdjMl7nNiOCLKkZBItiAWw&oe=69A82A3F&bitrate=642203&tag=dash_h264-basic-gen2_720p",
@@ -177,19 +172,75 @@ const TITLE_BANK = [
   "Không hiểu sao coi mà thấy chill ghê",
   "Cảnh này bật full màn hình coi mới đã",
   "Ai coi tới đây chắc cũng giống mình thôi 😭",
+  "Thoạt nhìn bình thường mà coi kỹ lại cuốn lắm",
+  "Coi lần đầu chưa đủ đâu…",
+  "Ủa sao coi mà thấy dễ chịu ghê",
+  "Góc này mà quay là auto dính",
+  "Coi mà tự nhiên muốn lưu lại liền",
+  "Không phải khoe chứ clip này coi hơi bị ổn",
+  "Coi tới cuối đi rồi quay lại nói chuyện tiếp 😳",
+  "Ủa sao coi mà thấy thương ngang vậy trời",
+  "Nhìn vậy thôi chứ coi cuốn lắm nha",
+  "Ai đang mệt coi cái này thử đi",
+  "Cảnh này mà coi ban đêm là hợp vibe lắm",
+  "Ủa sao coi mà thấy muốn coi tiếp nữa",
+  "Không hiểu sao clip này coi hoài không ngán",
+  "Coi tới đoạn sau mới thấy cái hay",
+  "Vibe nhẹ nhẹ mà coi đã ghê",
+  "Ủa sao coi mà tự nhiên cười vậy nè",
+  "Coi mà quên luôn đang định làm gì",
+  "Đoạn này mà bỏ là hơi uổng đó",
+  "Coi tới cuối thử coi 😳",
+  "Không biết sao chứ mình coi lại lần nữa rồi",
+  "Cảnh này coi trên màn hình lớn là hết bài",
+  "Ủa sao coi mà thấy yên yên vậy trời",
+  "Nhìn đơn giản mà coi cuốn ghê",
+  "Coi mà tự nhiên thấy dễ chịu ngang",
+  "Đoạn sau mới là đoạn hay nè",
+  "Coi thử đi rồi hiểu cảm giác này",
+  "Ủa sao coi mà thấy thích nhẹ vậy ta",
+  "Coi mà quên luôn thời gian trôi",
+  "Cảnh này coi lại vẫn thấy ổn",
+  "Không biết mọi người sao chứ mình thấy cuốn",
+  "Coi mà tự nhiên muốn share cho bạn bè",
+  "Góc này mà quay là hợp TikTok lắm",
+  "Coi mà thấy vibe dịu ghê",
+  "Ủa sao coi mà thấy vui vui vậy",
+  "Coi tới cuối đi đừng bỏ giữa chừng",
+  "Không hiểu sao coi mà thấy nhẹ lòng",
+  "Cảnh này coi hoài vẫn thấy ổn",
+  "Coi mà tự nhiên muốn coi thêm nữa",
+  "Ủa sao clip này coi mà không tua nổi",
+  "Coi mà quên luôn đang lướt mạng",
+  "Nhìn vậy thôi chứ coi là dính đó",
+  "Coi thử đi biết đâu hợp vibe bạn",
+  "Ủa sao coi mà thấy chill dữ vậy",
+  "Coi mà tự nhiên thấy dễ thương ghê",
+  "Đoạn này coi lại vẫn thấy hay",
+  "Coi mà quên luôn mình vô app làm gì",
+  "Không biết sao chứ mình thấy clip này ổn",
+  "Coi tới cuối thử nha 😳",
+  "Cảnh này coi buổi tối là hợp lắm",
+  "Coi mà tự nhiên thấy muốn coi thêm",
+  "Nhìn đơn giản mà coi là cuốn",
+  "Ủa sao coi mà thấy thích ngang vậy",
+  "Coi mà quên luôn thời gian",
+  "Đoạn này coi lại lần nữa cũng được",
+  "Coi thử đi rồi quay lại đây nói chuyện tiếp 😭"
 ];
 
-// ---------- helpers ----------
-function normalizeToUrl(item) { return (item || "").toString().trim(); }
+// ---------- tiny helpers ----------
+const now = () => Date.now();
+const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const normalizeToUrl = (s) => (s || "").toString().trim();
+
 function shuffleInPlace(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = (Math.random() * (i + 1)) | 0;
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
 }
-function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function now() { return Date.now(); }
 
 function muteIcon(muted) {
   return muted
@@ -203,157 +254,13 @@ function muteIcon(muted) {
       </svg>`;
 }
 
-/* ===========================
-   Stable ID from URL (hash)
-   =========================== */
-function stableStringify(obj) {
-  const allKeys = [];
-  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
-  allKeys.sort();
-  return JSON.stringify(obj, allKeys);
-}
-
-async function sha256Hex(input) {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  const bytes = new Uint8Array(buf);
-  let hex = "";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  return hex;
-}
-
-// ✅ id ổn định theo URL, ngắn gọn để đọc trong summary
-async function stableVideoIdFromUrl(url) {
-  const h = await sha256Hex(url);
-  return `vid_${h.slice(0, 10)}`; // ví dụ: vid_a1b2c3d4e5
-}
-
-/* ===========================
-   Fingerprint (LIGHT) — after consent only
-   =========================== */
-async function getUAHighEntropy() {
-  try {
-    const uaData = navigator.userAgentData;
-    if (!uaData || !uaData.getHighEntropyValues) return null;
-
-    const v = await uaData.getHighEntropyValues([
-      "platform", "platformVersion", "architecture", "model",
-      "bitness", "wow64", "fullVersionList"
-    ]);
-
-    return {
-      mobile: !!uaData.mobile,
-      brands: (uaData.brands || []).slice(0, 5),
-      platform: uaData.platform || "",
-      high: v || {}
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getNetworkInfo() {
-  try {
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (!c) return null;
-    return {
-      effectiveType: c.effectiveType || "",
-      downlink: typeof c.downlink === "number" ? c.downlink : null,
-      rtt: typeof c.rtt === "number" ? c.rtt : null,
-      saveData: !!c.saveData
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getPrefs() {
-  try {
-    return {
-      colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-      reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
-      contrastMore: matchMedia("(prefers-contrast: more)").matches
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getViewport() {
-  try {
-    return {
-      inner: `${window.innerWidth}x${window.innerHeight}`,
-      outer: `${window.outerWidth}x${window.outerHeight}`,
-      dpr: window.devicePixelRatio || 1
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getOrientation() {
-  try {
-    const o = screen.orientation;
-    return {
-      type: o?.type || "",
-      angle: typeof o?.angle === "number" ? o.angle : null
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function sha256Base64Url(input) {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  const bytes = new Uint8Array(buf);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  return b64;
-}
-
-async function buildFingerprintLight() {
-  const uaCh = await getUAHighEntropy();
-
-  const fp = {
-    ua: (navigator.userAgent || "").slice(0, 220),
-    languages: (navigator.languages || [navigator.language || ""]).slice(0, 6),
-    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-    tzOffsetMin: new Date().getTimezoneOffset(),
-
-    platform: navigator.platform || "",
-    vendor: navigator.vendor || "",
-
-    deviceMemory: navigator.deviceMemory || null,
-    hardwareConcurrency: navigator.hardwareConcurrency || null,
-
-    screen: `${screen.width}x${screen.height}`,
-    availScreen: `${screen.availWidth}x${screen.availHeight}`,
-    colorDepth: screen.colorDepth || null,
-
-    viewport: getViewport(),
-    orientation: getOrientation(),
-    prefs: getPrefs(),
-    net: getNetworkInfo(),
-
-    uaCh // may be null
-  };
-
-  const hash = await sha256Base64Url(stableStringify(fp));
-  return { fp_light: fp, fp_light_hash: hash };
-}
-
-/* ===========================
-   DOM
-   =========================== */
+// ---------- DOM ----------
 const feedEl = document.getElementById("feed");
 const captionEl = document.getElementById("caption");
 const toastEl = document.getElementById("toast");
 const btnMute = document.getElementById("btnMute");
 const btnGift = document.getElementById("btnGift");
 
-// Gift redirect
 if (btnGift) btnGift.addEventListener("click", () => (window.location.href = "https://mxhvn.github.io/vn/donations.html"));
 
 function toast(msg) {
@@ -363,9 +270,7 @@ function toast(msg) {
   setTimeout(() => toastEl.classList.remove("show"), 900);
 }
 
-/* ===========================
-   Session analytics state
-   =========================== */
+// ---------- IDs ----------
 function getUID() {
   const key = "vid_uid";
   let v = localStorage.getItem(key);
@@ -384,59 +289,28 @@ function getOrCreateSessionId() {
   }
   return sid;
 }
-
 const UID = getUID();
 const SESSION_ID = getOrCreateSessionId();
 
-const session = {
-  sid: SESSION_ID,
-  uid: UID,
-  startedAt: now(),
-  endedAt: null,
-  durationMs: 0,
-  videosSeen: 0,
-  videoIdsSeen: [],
-  activeVideoId: null,
-  watchMsByVideo: {},
-  lastTickAt: now(),
-  muted: true,
-  ref: document.referrer || "",
-  url: location.href,
-  lang: navigator.language || "",
-  tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-  screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
-  ua: (navigator.userAgent || "").slice(0, 220),
-
-  // ✅ map để summary biết chính xác video nào
-  metaById: {} // { [feedId]: { url, title } }
-};
-
-function markVideoSeen(feedId) {
-  if (!feedId) return;
-  if (!session.videoIdsSeen.includes(feedId)) {
-    session.videoIdsSeen.push(feedId);
-    session.videosSeen = session.videoIdsSeen.length;
-  }
+// ---------- consent + send (avoid preflight) ----------
+function hasConsent() {
+  return localStorage.getItem("vid_analytics_ok") === "1";
 }
 
-function tickWatchTime() {
-  const t = now();
-  const dt = Math.max(0, t - session.lastTickAt);
-  session.lastTickAt = t;
-
-  if (document.visibilityState !== "visible") return;
-  const vid = session.activeVideoId;
-  if (!vid) return;
-
-  session.watchMsByVideo[vid] = (session.watchMsByVideo[vid] || 0) + dt;
+function sendBeaconPayload(payload) {
+  try {
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
+      navigator.sendBeacon(SESSION_ENDPOINT, blob);
+      return true;
+    }
+  } catch {}
+  return false;
 }
-setInterval(tickWatchTime, 1000);
 
-/* ===========================
-   Quick event sender (supports extra payload)
-   =========================== */
-function sendQuickEvent(eventName, extra = null) {
-  const payload = {
+function quickPayload(eventName, extra = null) {
+  return {
     sid: SESSION_ID,
     uid: UID,
     event: eventName,
@@ -447,25 +321,13 @@ function sendQuickEvent(eventName, extra = null) {
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
     screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
     ua: (navigator.userAgent || "").slice(0, 220),
-    ...(extra && typeof extra === "object" ? extra : {})
+    ...(extra && typeof extra === "object" ? extra : {}),
   };
-
-  try {
-    fetch(SESSION_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      keepalive: true
-    }).catch(() => {});
-  } catch {}
 }
 
-/* ===========================
-   Consent Like (after consent => build fp light)
-   =========================== */
+// Consent UI
 function ensureConsent() {
-  const key = "vid_analytics_ok";
-  if (localStorage.getItem(key) === "1") return true;
+  if (hasConsent()) return true;
 
   const bar = document.createElement("div");
   bar.style.cssText = `
@@ -500,18 +362,11 @@ function ensureConsent() {
 
   document.body.appendChild(bar);
 
-  bar.querySelector("#vidOk").addEventListener("click", async () => {
-    localStorage.setItem(key, "1");
+  bar.querySelector("#vidOk").addEventListener("click", () => {
+    localStorage.setItem("vid_analytics_ok", "1");
 
-    // ✅ fingerprint light AFTER consent
-    let fpPack = null;
-    try {
-      fpPack = await buildFingerprintLight();
-      localStorage.setItem("fp_light_hash", fpPack.fp_light_hash);
-    } catch {}
-
-    // ✅ log consent OK with fingerprint pack
-    sendQuickEvent("consent_ok", fpPack);
+    // ✅ consent_ok via beacon (no preflight)
+    sendBeaconPayload(quickPayload("consent_ok"));
 
     bar.remove();
   });
@@ -520,55 +375,72 @@ function ensureConsent() {
 }
 ensureConsent();
 
-/* ===========================
-   Build FEED (stable id + shuffle)
-   =========================== */
-let FEED = [];
+// ---------- FEED build (CSS handles layout) ----------
+const URLS = RAW_LIST.map(normalizeToUrl).filter(Boolean);
+shuffleInPlace(URLS);
 
-async function buildFeedFromRawList() {
-  const urls = RAW_LIST.map(normalizeToUrl).filter(Boolean);
+const FEED = URLS.map((url, idx) => ({
+  id: `v${idx + 1}`,            // id theo order sau shuffle (để UI/DOM)
+  url,
+  title: pickRandom(TITLE_BANK),
+  key: url                      // ✅ định danh ổn định: URL
+}));
 
-  // tạo meta trước (id ổn định theo URL)
-  const items = [];
-  for (const url of urls) {
-    let id = "";
-    try {
-      id = await stableVideoIdFromUrl(url);
-    } catch {
-      // fallback nếu crypto.subtle lỗi (hiếm)
-      id = `vid_${Math.random().toString(16).slice(2, 10)}`;
-    }
+// ---------- session watch state ----------
+const session = {
+  sid: SESSION_ID,
+  uid: UID,
+  startedAt: now(),
+  endedAt: null,
+  durationMs: 0,
+  videosSeen: 0,
+  videoIdsSeen: [],
+  activeVideoId: null,
+  watchMsByVideo: {},    // by FEED.id
+  metaById: {},           // {id:{url,title,key}}
+  lastTickAt: now(),
+  muted: true,
+  ref: document.referrer || "",
+  url: location.href,
+  lang: navigator.language || "",
+  tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+  screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+  ua: (navigator.userAgent || "").slice(0, 220),
+};
 
-    items.push({
-      id,                 // ✅ ổn định theo URL
-      url,
-      title: pickRandom(TITLE_BANK),
-      rawIndex: urls.indexOf(url) // optional debug, không dùng logic
-    });
+function markVideoSeen(id) {
+  if (!id) return;
+  if (!session.videoIdsSeen.includes(id)) {
+    session.videoIdsSeen.push(id);
+    session.videosSeen = session.videoIdsSeen.length;
   }
-
-  // shuffle items (không ảnh hưởng id)
-  shuffleInPlace(items);
-  return items;
 }
 
-/* ===========================
-   Tap Hint UI
-   =========================== */
-let observer = null;
+function tickWatchTime() {
+  const t = now();
+  const dt = Math.max(0, t - session.lastTickAt);
+  session.lastTickAt = t;
+
+  if (document.visibilityState !== "visible") return;
+  const id = session.activeVideoId;
+  if (!id) return;
+
+  session.watchMsByVideo[id] = (session.watchMsByVideo[id] || 0) + dt;
+}
+setInterval(tickWatchTime, 1000);
+
+// ---------- Tap hint UI: uses .is-hidden only ----------
 let globalMuted = true;
 let lastTapAt = 0;
 let hintTimer = null;
 
 function showControls() {
-  if (btnMute) btnMute.classList.remove("is-hidden");
-  if (btnGift) btnGift.classList.remove("is-hidden");
-  if (captionEl) captionEl.classList.remove("is-hidden");
+  btnMute && btnMute.classList.remove("is-hidden");
+  captionEl && captionEl.classList.remove("is-hidden");
 }
 function hideControls() {
-  if (btnMute) btnMute.classList.add("is-hidden");
-  if (btnGift) btnGift.classList.add("is-hidden");
-  if (captionEl) captionEl.classList.add("is-hidden");
+  btnMute && btnMute.classList.add("is-hidden");
+  captionEl && captionEl.classList.add("is-hidden");
 }
 function showControlsBrief(ms = 1600) {
   showControls();
@@ -597,20 +469,13 @@ function setMuteAll(muted) {
   toast(muted ? "Muted" : "Unmuted");
 }
 
-if (btnMute) {
-  btnMute.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setMuteAll(!globalMuted);
-    hideControls();
-  });
-}
-if (btnGift) {
-  btnGift.addEventListener("click", (e) => e.stopPropagation());
-}
+btnMute && btnMute.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setMuteAll(!globalMuted);
+  hideControls();
+});
 
-/* ===========================
-   Auto-next
-   =========================== */
+// ---------- Auto-next ----------
 function goNextFromSlide(slideEl) {
   const next = slideEl?.nextElementSibling;
   if (next && next.classList.contains("slide")) {
@@ -618,23 +483,17 @@ function goNextFromSlide(slideEl) {
   }
 }
 
-/* ===========================
-   Render
-   =========================== */
 function attachVideoSignals(video, slideEl) {
-  video.addEventListener("pause", () => {
-    showControls();
-  });
-
-  video.addEventListener("play", () => {
-    hideControls();
-  });
-
+  video.addEventListener("pause", () => showControls());
+  video.addEventListener("play", () => hideControls());
   video.addEventListener("ended", () => {
     if (session.activeVideoId !== slideEl?.dataset?.id) return;
     goNextFromSlide(slideEl);
   });
 }
+
+// ---------- Render ----------
+let observer = null;
 
 function render() {
   if (!feedEl) return;
@@ -645,21 +504,18 @@ function render() {
     s.className = "slide";
     s.dataset.id = item.id;
     s.dataset.title = item.title;
-    s.dataset.url = item.url; // ✅ để debug/admin nếu cần
+    s.dataset.url = item.url; // debug/inspect
 
-    // loop removed so ended fires
+    // CSS makes it full-screen + object-fit behavior
     s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
 
-    // store meta for summary (stable)
-    session.metaById[item.id] = { url: item.url, title: item.title };
+    session.metaById[item.id] = { url: item.url, title: item.title, key: item.key };
 
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
 
-    // Tap slide:
-    // - If paused -> play
-    // - If playing -> (1st tap) show hint, (2nd tap quickly) pause
-    s.addEventListener("click", () => {
+    // ✅ use pointerup (mobile friendly) instead of click
+    s.addEventListener("pointerup", () => {
       const video = s.querySelector("video");
       if (!video) return;
 
@@ -673,11 +529,8 @@ function render() {
       const dt = t - lastTapAt;
       lastTapAt = t;
 
-      if (dt < 320) {
-        video.pause();
-      } else {
-        showControlsBrief(1600);
-      }
+      if (dt < 320) video.pause();
+      else showControlsBrief(1600);
     });
 
     feedEl.appendChild(s);
@@ -687,7 +540,7 @@ function render() {
   if (first?.dataset?.id) {
     session.activeVideoId = first.dataset.id;
     markVideoSeen(first.dataset.id);
-    if (captionEl) captionEl.textContent = first.dataset.title || "";
+    captionEl && (captionEl.textContent = first.dataset.title || "");
   }
 
   setupObserver();
@@ -713,7 +566,7 @@ function setupObserver() {
           session.activeVideoId = id;
           markVideoSeen(id);
         }
-        if (captionEl) captionEl.textContent = slide.dataset.title || "";
+        captionEl && (captionEl.textContent = slide.dataset.title || "");
 
         try {
           video.muted = globalMuted;
@@ -726,34 +579,28 @@ function setupObserver() {
         video.pause();
       }
     });
-  }, { root: feedEl, threshold: 0.66 });
+  }, {
+    root: feedEl,
+    threshold: 0.55,              // ✅ smoother switching for snap feed
+    // rootMargin: "-20% 0px -20% 0px" // (optional) thay threshold nếu bạn thích
+  });
 
   document.querySelectorAll(".slide").forEach(s => observer.observe(s));
 }
 
-/* ===========================
-   Send session on end (after consent only)
-   =========================== */
+// ---------- Session summary (after consent only) ----------
 function buildSessionPayload() {
   const endedAt = now();
   session.endedAt = endedAt;
   session.durationMs = Math.max(0, endedAt - session.startedAt);
 
-  // top watch with meta (id stable)
   const top = Object.entries(session.watchMsByVideo)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([feedId, ms]) => {
-      const meta = session.metaById?.[feedId] || {};
-      return {
-        feedId,
-        ms,
-        url: meta.url || "",
-        title: meta.title || ""
-      };
+    .map(([id, ms]) => {
+      const meta = session.metaById[id] || {};
+      return { feedId: id, ms, url: meta.url || "", title: meta.title || "", key: meta.key || "" };
     });
-
-  const fp_light_hash = localStorage.getItem("fp_light_hash") || "";
 
   return {
     sid: session.sid,
@@ -771,9 +618,6 @@ function buildSessionPayload() {
     tz: session.tz,
     screen: session.screen,
     ua: session.ua,
-
-    // ✅ fp hash only (light)
-    fp_light_hash
   };
 }
 
@@ -781,25 +625,9 @@ let sent = false;
 function sendSession() {
   if (sent) return;
   sent = true;
+  if (!hasConsent()) return;
 
-  // ✅ strictly only after consent
-  if (localStorage.getItem("vid_analytics_ok") !== "1") return;
-
-  const body = JSON.stringify(buildSessionPayload());
-
-  // ✅ IMPORTANT: avoid preflight/ping CORS by using text/plain
-  if (navigator.sendBeacon) {
-    const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
-    navigator.sendBeacon(SESSION_ENDPOINT, blob);
-    return;
-  }
-
-  fetch(SESSION_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true
-  }).catch(() => {});
+  sendBeaconPayload(buildSessionPayload());
 }
 
 window.addEventListener("pagehide", sendSession);
@@ -807,12 +635,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") sendSession();
 });
 
-/* ===========================
-   Init (async build FEED first)
-   =========================== */
-(async () => {
-  FEED = await buildFeedFromRawList();
-  render();
-  setMuteAll(true);
-  hideControls();
-})();
+// ---------- Init ----------
+render();
+setMuteAll(true);
+hideControls();
