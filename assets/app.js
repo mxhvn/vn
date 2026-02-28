@@ -1,16 +1,13 @@
 /**
  * Seedance — FULL app.js (Tap Hint UI + Auto-Next + Analytics + Fingerprint light)
- * - Tap while playing => show controls briefly then auto-hide
- * - Toggle mute => hide controls immediately
- * - Pause => show controls (fade in) and keep visible
- * - Consent Like => send quick event immediately ("consent_ok") WITH fingerprint light
- * - Send session analytics on end (sendBeacon text/plain to avoid preflight)
- * - Auto-next: when video ended => scroll to next slide (no swipe)
+ * ✅ UPDATE:
+ * - Video ID dựa vào _nc_gid (không dùng hash)
+ * - RAW_LIST vẫn là string[]
+ * - FEED shuffle thoải mái nhưng ID vẫn định vị được
+ * - topWatch gửi kèm url/title để đọc Telegram dễ
  *
- * ✅ IMPORTANT UPDATE:
- * - RAW_LIST giữ nguyên dạng string[] (KHÔNG cần thêm id)
- * - FEED được build với ID ỔN ĐỊNH theo URL (hash) => dù shuffle vẫn nhận diện chính xác video
- * - topWatch gửi kèm url/title để đọc summary dễ hơn
+ * CORS note:
+ * - summary sendBeacon dùng text/plain để hạn chế preflight
  */
 
 const WORKER_BASE = "https://seedance.testmail12071997.workers.dev";
@@ -234,7 +231,9 @@ const TITLE_BANK = [
   "Coi thử đi rồi quay lại đây nói chuyện tiếp 😭"
 ];
 
-// ---------- helpers ----------
+/* ===========================
+   Helpers
+   =========================== */
 function normalizeToUrl(item) { return (item || "").toString().trim(); }
 function shuffleInPlace(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -259,28 +258,41 @@ function muteIcon(muted) {
 }
 
 /* ===========================
-   Stable ID from URL (hash)
+   Video ID based on _nc_gid
    =========================== */
-function stableStringify(obj) {
-  const allKeys = [];
-  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
-  allKeys.sort();
-  return JSON.stringify(obj, allKeys);
+
+/** Lấy query param từ URL an toàn */
+function getQueryParam(url, key) {
+  try {
+    const u = new URL(url);
+    return u.searchParams.get(key) || "";
+  } catch {
+    // fallback regex nếu URL có ký tự lạ
+    const m = String(url).match(new RegExp(`[?&]${key}=([^&]+)`));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
 }
 
-async function sha256Hex(input) {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  const bytes = new Uint8Array(buf);
-  let hex = "";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  return hex;
-}
+/**
+ * ID ưu tiên:
+ * 1) _nc_gid
+ * 2) oe (hạn dùng) -> vẫn khá dễ nhìn
+ * 3) _nc_ohc (token) -> fallback
+ * 4) cuối URL (ngắn) -> fallback cuối cùng
+ */
+function stableVideoIdFromUrl(url) {
+  const gid = getQueryParam(url, "_nc_gid");
+  if (gid) return `vid_${gid}`;
 
-// ✅ id ổn định theo URL, ngắn gọn để đọc trong summary
-async function stableVideoIdFromUrl(url) {
-  const h = await sha256Hex(url);
-  return `vid_${h.slice(0, 10)}`; // ví dụ: vid_a1b2c3d4e5
+  const oe = getQueryParam(url, "oe");
+  if (oe) return `vid_oe_${oe}`;
+
+  const ohc = getQueryParam(url, "_nc_ohc");
+  if (ohc) return `vid_ohc_${ohc}`;
+
+  // fallback ngắn gọn
+  const s = String(url);
+  return `vid_${s.slice(-12).replace(/[^a-zA-Z0-9_]/g, "") || "unknown"}`;
 }
 
 /* ===========================
@@ -358,16 +370,6 @@ function getOrientation() {
   }
 }
 
-async function sha256Base64Url(input) {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  const bytes = new Uint8Array(buf);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  return b64;
-}
-
 async function buildFingerprintLight() {
   const uaCh = await getUAHighEntropy();
 
@@ -391,12 +393,25 @@ async function buildFingerprintLight() {
     orientation: getOrientation(),
     prefs: getPrefs(),
     net: getNetworkInfo(),
-
-    uaCh // may be null
+    uaCh
   };
 
-  const hash = await sha256Base64Url(stableStringify(fp));
-  return { fp_light: fp, fp_light_hash: hash };
+  // Bạn nói không cần hash nữa → chỉ gửi “fp_light” (nhẹ) hoặc chỉ gửi vài field tuỳ ý.
+  // Để gọn, mình gửi bản rút gọn:
+  return {
+    fp_light: {
+      tz: fp.tz,
+      tzOffsetMin: fp.tzOffsetMin,
+      languages: fp.languages,
+      platform: fp.platform,
+      deviceMemory: fp.deviceMemory,
+      hardwareConcurrency: fp.hardwareConcurrency,
+      screen: fp.screen,
+      viewport: fp.viewport,
+      net: fp.net,
+      uaCh: fp.uaCh
+    }
+  };
 }
 
 /* ===========================
@@ -408,7 +423,6 @@ const toastEl = document.getElementById("toast");
 const btnMute = document.getElementById("btnMute");
 const btnGift = document.getElementById("btnGift");
 
-// Gift redirect
 if (btnGift) btnGift.addEventListener("click", () => (window.location.href = "https://mxhvn.github.io/vn/donations.html"));
 
 function toast(msg) {
@@ -449,11 +463,13 @@ const session = {
   startedAt: now(),
   endedAt: null,
   durationMs: 0,
+
   videosSeen: 0,
   videoIdsSeen: [],
   activeVideoId: null,
   watchMsByVideo: {},
   lastTickAt: now(),
+
   muted: true,
   ref: document.referrer || "",
   url: location.href,
@@ -462,8 +478,7 @@ const session = {
   screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
   ua: (navigator.userAgent || "").slice(0, 220),
 
-  // ✅ map để summary biết chính xác video nào
-  metaById: {} // { [feedId]: { url, title } }
+  metaById: {} // { [feedId]: { url, title, nc_gid } }
 };
 
 function markVideoSeen(feedId) {
@@ -488,7 +503,7 @@ function tickWatchTime() {
 setInterval(tickWatchTime, 1000);
 
 /* ===========================
-   Quick event sender (supports extra payload)
+   Quick event sender
    =========================== */
 function sendQuickEvent(eventName, extra = null) {
   const payload = {
@@ -516,7 +531,7 @@ function sendQuickEvent(eventName, extra = null) {
 }
 
 /* ===========================
-   Consent Like (after consent => build fp light)
+   Consent Like
    =========================== */
 function ensureConsent() {
   const key = "vid_analytics_ok";
@@ -558,16 +573,12 @@ function ensureConsent() {
   bar.querySelector("#vidOk").addEventListener("click", async () => {
     localStorage.setItem(key, "1");
 
-    // ✅ fingerprint light AFTER consent
     let fpPack = null;
     try {
       fpPack = await buildFingerprintLight();
-      localStorage.setItem("fp_light_hash", fpPack.fp_light_hash);
     } catch {}
 
-    // ✅ log consent OK with fingerprint pack
     sendQuickEvent("consent_ok", fpPack);
-
     bar.remove();
   });
 
@@ -576,39 +587,25 @@ function ensureConsent() {
 ensureConsent();
 
 /* ===========================
-   Build FEED (stable id + shuffle)
+   Build FEED (id = _nc_gid)
    =========================== */
 let FEED = [];
 
-async function buildFeedFromRawList() {
+function buildFeedFromRawList() {
   const urls = RAW_LIST.map(normalizeToUrl).filter(Boolean);
 
-  // tạo meta trước (id ổn định theo URL)
-  const items = [];
-  for (const url of urls) {
-    let id = "";
-    try {
-      id = await stableVideoIdFromUrl(url);
-    } catch {
-      // fallback nếu crypto.subtle lỗi (hiếm)
-      id = `vid_${Math.random().toString(16).slice(2, 10)}`;
-    }
+  const items = urls.map((url) => {
+    const id = stableVideoIdFromUrl(url);          // ✅ vid_<nc_gid>
+    const nc_gid = getQueryParam(url, "_nc_gid");  // để debug/telegram nếu muốn
+    return { id, url, title: pickRandom(TITLE_BANK), nc_gid };
+  });
 
-    items.push({
-      id,                 // ✅ ổn định theo URL
-      url,
-      title: pickRandom(TITLE_BANK),
-      rawIndex: urls.indexOf(url) // optional debug, không dùng logic
-    });
-  }
-
-  // shuffle items (không ảnh hưởng id)
   shuffleInPlace(items);
   return items;
 }
 
 /* ===========================
-   Tap Hint UI
+   Tap Hint UI (matches app.css)
    =========================== */
 let observer = null;
 let globalMuted = true;
@@ -677,14 +674,8 @@ function goNextFromSlide(slideEl) {
    Render
    =========================== */
 function attachVideoSignals(video, slideEl) {
-  video.addEventListener("pause", () => {
-    showControls();
-  });
-
-  video.addEventListener("play", () => {
-    hideControls();
-  });
-
+  video.addEventListener("pause", () => showControls());
+  video.addEventListener("play", () => hideControls());
   video.addEventListener("ended", () => {
     if (session.activeVideoId !== slideEl?.dataset?.id) return;
     goNextFromSlide(slideEl);
@@ -700,20 +691,23 @@ function render() {
     s.className = "slide";
     s.dataset.id = item.id;
     s.dataset.title = item.title;
-    s.dataset.url = item.url; // ✅ để debug/admin nếu cần
+    s.dataset.url = item.url;
 
-    // loop removed so ended fires
     s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
 
-    // store meta for summary (stable)
-    session.metaById[item.id] = { url: item.url, title: item.title };
+    // meta map (để summary đọc ra URL chính xác)
+    session.metaById[item.id] = {
+      url: item.url,
+      title: item.title,
+      nc_gid: item.nc_gid || ""
+    };
 
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
 
-    // Tap slide:
-    // - If paused -> play
-    // - If playing -> (1st tap) show hint, (2nd tap quickly) pause
+    // Click behavior:
+    // - paused => play
+    // - playing => 1 tap show hint, 2 tap nhanh pause
     s.addEventListener("click", () => {
       const video = s.querySelector("video");
       if (!video) return;
@@ -728,11 +722,8 @@ function render() {
       const dt = t - lastTapAt;
       lastTapAt = t;
 
-      if (dt < 320) {
-        video.pause();
-      } else {
-        showControlsBrief(1600);
-      }
+      if (dt < 320) video.pause();
+      else showControlsBrief(1600);
     });
 
     feedEl.appendChild(s);
@@ -758,16 +749,14 @@ function setupObserver() {
       if (!video) return;
 
       if (entry.isIntersecting) {
-        // pause others
-        document.querySelectorAll(".slide video").forEach(v => {
-          if (v !== video) v.pause();
-        });
+        document.querySelectorAll(".slide video").forEach(v => { if (v !== video) v.pause(); });
 
         const id = slide.dataset.id || null;
         if (id && id !== session.activeVideoId) {
           session.activeVideoId = id;
           markVideoSeen(id);
         }
+
         if (captionEl) captionEl.textContent = slide.dataset.title || "";
 
         try {
@@ -787,28 +776,26 @@ function setupObserver() {
 }
 
 /* ===========================
-   Send session on end (after consent only)
+   Send session summary (after consent only)
    =========================== */
 function buildSessionPayload() {
   const endedAt = now();
   session.endedAt = endedAt;
   session.durationMs = Math.max(0, endedAt - session.startedAt);
 
-  // top watch with meta (id stable)
   const top = Object.entries(session.watchMsByVideo)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([feedId, ms]) => {
       const meta = session.metaById?.[feedId] || {};
       return {
-        feedId,
+        feedId,                // vid_<nc_gid>
         ms,
+        nc_gid: meta.nc_gid || "",
         url: meta.url || "",
         title: meta.title || ""
       };
     });
-
-  const fp_light_hash = localStorage.getItem("fp_light_hash") || "";
 
   return {
     sid: session.sid,
@@ -825,10 +812,7 @@ function buildSessionPayload() {
     lang: session.lang,
     tz: session.tz,
     screen: session.screen,
-    ua: session.ua,
-
-    // ✅ fp hash only (light)
-    fp_light_hash
+    ua: session.ua
   };
 }
 
@@ -837,12 +821,10 @@ function sendSession() {
   if (sent) return;
   sent = true;
 
-  // ✅ strictly only after consent
   if (localStorage.getItem("vid_analytics_ok") !== "1") return;
 
   const body = JSON.stringify(buildSessionPayload());
 
-  // ✅ IMPORTANT: avoid preflight/ping CORS by using text/plain
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
     navigator.sendBeacon(SESSION_ENDPOINT, blob);
@@ -863,10 +845,10 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ===========================
-   Init (async build FEED first)
+   Init
    =========================== */
-(async () => {
-  FEED = await buildFeedFromRawList();
+(() => {
+  FEED = buildFeedFromRawList();
   render();
   setMuteAll(true);
   hideControls();
