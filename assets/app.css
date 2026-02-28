@@ -179,3 +179,11 @@ body{
     transition: none !important;
   }
 }
+
+/* Desktop: giữ đúng tỉ lệ video (không crop) */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine){
+  .slide video{
+    object-fit: contain;
+    background:#000;
+  }
+}
