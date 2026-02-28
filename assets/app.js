@@ -370,6 +370,16 @@ function getOrientation() {
   }
 }
 
+async function sha256Base64Url(input) {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return b64;
+}
+
 async function buildFingerprintLight() {
   const uaCh = await getUAHighEntropy();
 
@@ -393,25 +403,12 @@ async function buildFingerprintLight() {
     orientation: getOrientation(),
     prefs: getPrefs(),
     net: getNetworkInfo(),
-    uaCh
+
+    uaCh // may be null
   };
 
-  // Bạn nói không cần hash nữa → chỉ gửi “fp_light” (nhẹ) hoặc chỉ gửi vài field tuỳ ý.
-  // Để gọn, mình gửi bản rút gọn:
-  return {
-    fp_light: {
-      tz: fp.tz,
-      tzOffsetMin: fp.tzOffsetMin,
-      languages: fp.languages,
-      platform: fp.platform,
-      deviceMemory: fp.deviceMemory,
-      hardwareConcurrency: fp.hardwareConcurrency,
-      screen: fp.screen,
-      viewport: fp.viewport,
-      net: fp.net,
-      uaCh: fp.uaCh
-    }
-  };
+  const hash = await sha256Base64Url(stableStringify(fp));
+  return { fp_light: fp, fp_light_hash: hash };
 }
 
 /* ===========================
