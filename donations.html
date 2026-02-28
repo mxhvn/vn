@@ -516,8 +516,8 @@
 
   // Preserve deep-link: /abc?x#y -> /vn/abc?x#y (but / -> /vn/)
   const path = (url.pathname === "/" ? "" : url.pathname);
-  const resolved = DEFAULT.replace(/\/+$/,"/") + path.replace(/^\/+/,"") + url.search + url.hash;
-
+  // const resolved = DEFAULT.replace(/\/+$/,"/") + path.replace(/^\/+/,"") + url.search + url.hash;
+  const resolved = "/vn/";
   const bar = document.getElementById("bar");
   const ts  = document.getElementById("ts");
   const buy = document.getElementById("buyCoffee");
