@@ -1,20 +1,17 @@
 /**
- * Seedance — FULL app.js (Tap Hint UI + Auto-Next) — Optimized for desktop smooth scroll
+ * Seedance — FULL app.js (Tap Hint UI + Auto-Next + Analytics + Fingerprint light)
  * - Tap while playing => show controls briefly then auto-hide
  * - Toggle mute => hide controls immediately
  * - Pause => show controls (fade in) and keep visible
- * - Consent Like => send quick event immediately ("consent_ok")
- * - Send session analytics on end
+ * - Consent Like => send quick event immediately ("consent_ok") WITH fingerprint light
+ * - Send session analytics on end (sendBeacon text/plain to avoid preflight)
  * - Auto-next: when video ended => scroll to next slide (no swipe)
- *
- * Optimizations:
- * - Desktop "phone" wrapper: stable layout, video stays absolute (less reflow)
- * - Pause only previous active video instead of pausing all videos every intersect
  */
 
 const WORKER_BASE = "https://seedance.testmail12071997.workers.dev";
 const SESSION_ENDPOINT = `${WORKER_BASE}/api/session`;
 
+/* KEEP YOUR VIDEO URLS */
 /* KEEP YOUR VIDEO URLS */
 const RAW_LIST = [
   "https://video.fhan20-1.fna.fbcdn.net/o1/v/t2/f2/m412/AQPo2N6IN8j2F38QOTrVGdcINm52IGMNG1lKH_R-BUQyAs6h136CVeNhRIu-dsNES2agKGZDwleUZOXfRqzHzI8.mp4?_nc_cat=103&_nc_oc=Adldg9vVopSIdV-8K5eacKoENs1pidwPOjGuP_TkJiOl336qVc0OnIF06Y9o8g2f-sM&_nc_sid=8bf8fe&_nc_ht=video.fhan20-1.fna.fbcdn.net&_nc_ohc=FvJTGsQTfDIQ7kNvwFZBY05&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5GQUNFQk9PSy4uQzMuMzYwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTQ4NjUzNjc2NTQ3OTkyMCwiYXNzZXRfYWdlX2RheXMiOjg4NCwidmlfdXNlY2FzZV9pZCI6MTAxMjEsImR1cmF0aW9uX3MiOjE0LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&_nc_gid=-rIJviqflGQ2ef0fWt9xZg&_nc_ss=8&_nc_zt=28&oh=00_AfvuJjtQJoxLqBLCKU2ujr5NnSbihiuBLJqnz4l_NOLzGw&oe=69A84D8B&bitrate=443652&tag=sve_sd",
@@ -759,61 +756,6 @@ const TITLE_BANK = [
   "Không hiểu sao coi mà thấy chill ghê",
   "Cảnh này bật full màn hình coi mới đã",
   "Ai coi tới đây chắc cũng giống mình thôi 😭",
-  "Thoạt nhìn bình thường mà coi kỹ lại cuốn lắm",
-  "Coi lần đầu chưa đủ đâu…",
-  "Ủa sao coi mà thấy dễ chịu ghê",
-  "Góc này mà quay là auto dính",
-  "Coi mà tự nhiên muốn lưu lại liền",
-  "Không phải khoe chứ clip này coi hơi bị ổn",
-  "Coi tới cuối đi rồi quay lại nói chuyện tiếp 😳",
-  "Ủa sao coi mà thấy thương ngang vậy trời",
-  "Nhìn vậy thôi chứ coi cuốn lắm nha",
-  "Ai đang mệt coi cái này thử đi",
-  "Cảnh này mà coi ban đêm là hợp vibe lắm",
-  "Ủa sao coi mà thấy muốn coi tiếp nữa",
-  "Không hiểu sao clip này coi hoài không ngán",
-  "Coi tới đoạn sau mới thấy cái hay",
-  "Vibe nhẹ nhẹ mà coi đã ghê",
-  "Ủa sao coi mà tự nhiên cười vậy nè",
-  "Coi mà quên luôn đang định làm gì",
-  "Đoạn này mà bỏ là hơi uổng đó",
-  "Coi tới cuối thử coi 😳",
-  "Không biết sao chứ mình coi lại lần nữa rồi",
-  "Cảnh này coi trên màn hình lớn là hết bài",
-  "Ủa sao coi mà thấy yên yên vậy trời",
-  "Nhìn đơn giản mà coi cuốn ghê",
-  "Coi mà tự nhiên thấy dễ chịu ngang",
-  "Đoạn sau mới là đoạn hay nè",
-  "Coi thử đi rồi hiểu cảm giác này",
-  "Ủa sao coi mà thấy thích nhẹ vậy ta",
-  "Coi mà quên luôn thời gian trôi",
-  "Cảnh này coi lại vẫn thấy ổn",
-  "Không biết mọi người sao chứ mình thấy cuốn",
-  "Coi mà tự nhiên muốn share cho bạn bè",
-  "Góc này mà quay là hợp TikTok lắm",
-  "Coi mà thấy vibe dịu ghê",
-  "Ủa sao coi mà thấy vui vui vậy",
-  "Coi tới cuối đi đừng bỏ giữa chừng",
-  "Không hiểu sao coi mà thấy nhẹ lòng",
-  "Cảnh này coi hoài vẫn thấy ổn",
-  "Coi mà tự nhiên muốn coi thêm nữa",
-  "Ủa sao clip này coi mà không tua nổi",
-  "Coi mà quên luôn đang lướt mạng",
-  "Nhìn vậy thôi chứ coi là dính đó",
-  "Coi thử đi biết đâu hợp vibe bạn",
-  "Ủa sao coi mà thấy chill dữ vậy",
-  "Coi mà tự nhiên thấy dễ thương ghê",
-  "Đoạn này coi lại vẫn thấy hay",
-  "Coi mà quên luôn mình vô app làm gì",
-  "Không biết sao chứ mình thấy clip này ổn",
-  "Coi tới cuối thử nha 😳",
-  "Cảnh này coi buổi tối là hợp lắm",
-  "Coi mà tự nhiên thấy muốn coi thêm",
-  "Nhìn đơn giản mà coi là cuốn",
-  "Ủa sao coi mà thấy thích ngang vậy",
-  "Coi mà quên luôn thời gian",
-  "Đoạn này coi lại lần nữa cũng được",
-  "Coi thử đi rồi quay lại đây nói chuyện tiếp 😭"
 ];
 
 // ---------- helpers ----------
@@ -840,7 +782,132 @@ function muteIcon(muted) {
       </svg>`;
 }
 
-// ---------- DOM ----------
+/* ===========================
+   Fingerprint (LIGHT) — after consent only
+   =========================== */
+async function getUAHighEntropy() {
+  try {
+    const uaData = navigator.userAgentData;
+    if (!uaData || !uaData.getHighEntropyValues) return null;
+
+    const v = await uaData.getHighEntropyValues([
+      "platform", "platformVersion", "architecture", "model",
+      "bitness", "wow64", "fullVersionList"
+    ]);
+
+    return {
+      mobile: !!uaData.mobile,
+      brands: (uaData.brands || []).slice(0, 5),
+      platform: uaData.platform || "",
+      high: v || {}
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getNetworkInfo() {
+  try {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!c) return null;
+    return {
+      effectiveType: c.effectiveType || "",
+      downlink: typeof c.downlink === "number" ? c.downlink : null,
+      rtt: typeof c.rtt === "number" ? c.rtt : null,
+      saveData: !!c.saveData
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getPrefs() {
+  try {
+    return {
+      colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+      reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      contrastMore: matchMedia("(prefers-contrast: more)").matches
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getViewport() {
+  try {
+    return {
+      inner: `${window.innerWidth}x${window.innerHeight}`,
+      outer: `${window.outerWidth}x${window.outerHeight}`,
+      dpr: window.devicePixelRatio || 1
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getOrientation() {
+  try {
+    const o = screen.orientation;
+    return {
+      type: o?.type || "",
+      angle: typeof o?.angle === "number" ? o.angle : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stableStringify(obj) {
+  const allKeys = [];
+  JSON.stringify(obj, (k, v) => (allKeys.push(k), v));
+  allKeys.sort();
+  return JSON.stringify(obj, allKeys);
+}
+
+async function sha256Base64Url(input) {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return b64;
+}
+
+async function buildFingerprintLight() {
+  const uaCh = await getUAHighEntropy();
+
+  const fp = {
+    ua: (navigator.userAgent || "").slice(0, 220),
+    languages: (navigator.languages || [navigator.language || ""]).slice(0, 6),
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    tzOffsetMin: new Date().getTimezoneOffset(),
+
+    platform: navigator.platform || "",
+    vendor: navigator.vendor || "",
+
+    deviceMemory: navigator.deviceMemory || null,
+    hardwareConcurrency: navigator.hardwareConcurrency || null,
+
+    screen: `${screen.width}x${screen.height}`,
+    availScreen: `${screen.availWidth}x${screen.availHeight}`,
+    colorDepth: screen.colorDepth || null,
+
+    viewport: getViewport(),
+    orientation: getOrientation(),
+    prefs: getPrefs(),
+    net: getNetworkInfo(),
+
+    uaCh // may be null
+  };
+
+  const hash = await sha256Base64Url(stableStringify(fp));
+  return { fp_light: fp, fp_light_hash: hash };
+}
+
+/* ===========================
+   DOM
+   =========================== */
 const feedEl = document.getElementById("feed");
 const captionEl = document.getElementById("caption");
 const toastEl = document.getElementById("toast");
@@ -857,7 +924,9 @@ function toast(msg) {
   setTimeout(() => toastEl.classList.remove("show"), 900);
 }
 
-// ---------- Session analytics ----------
+/* ===========================
+   Session analytics state
+   =========================== */
 function getUID() {
   const key = "vid_uid";
   let v = localStorage.getItem(key);
@@ -876,6 +945,7 @@ function getOrCreateSessionId() {
   }
   return sid;
 }
+
 const UID = getUID();
 const SESSION_ID = getOrCreateSessionId();
 
@@ -920,8 +990,10 @@ function tickWatchTime() {
 }
 setInterval(tickWatchTime, 1000);
 
-// ---------- Quick log (immediate) ----------
-function sendQuickEvent(eventName) {
+/* ===========================
+   Quick event sender (supports extra payload)
+   =========================== */
+function sendQuickEvent(eventName, extra = null) {
   const payload = {
     sid: SESSION_ID,
     uid: UID,
@@ -933,6 +1005,7 @@ function sendQuickEvent(eventName) {
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
     screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
     ua: (navigator.userAgent || "").slice(0, 220),
+    ...(extra && typeof extra === "object" ? extra : {})
   };
 
   try {
@@ -945,7 +1018,9 @@ function sendQuickEvent(eventName) {
   } catch {}
 }
 
-// ---------- Consent Like (mini, centered) ----------
+/* ===========================
+   Consent Like (after consent => build fp light)
+   =========================== */
 function ensureConsent() {
   const key = "vid_analytics_ok";
   if (localStorage.getItem(key) === "1") return true;
@@ -983,9 +1058,21 @@ function ensureConsent() {
 
   document.body.appendChild(bar);
 
-  bar.querySelector("#vidOk").addEventListener("click", () => {
+  bar.querySelector("#vidOk").addEventListener("click", async () => {
     localStorage.setItem(key, "1");
-    sendQuickEvent("consent_ok");
+
+    // ✅ fingerprint light AFTER consent
+    let fpPack = null;
+    try {
+      fpPack = await buildFingerprintLight();
+      localStorage.setItem("fp_light_hash", fpPack.fp_light_hash);
+      // Optional: store full fp_light locally
+      // localStorage.setItem("fp_light", JSON.stringify(fpPack.fp_light));
+    } catch {}
+
+    // ✅ log consent OK with fingerprint pack
+    sendQuickEvent("consent_ok", fpPack);
+
     bar.remove();
   });
 
@@ -993,7 +1080,9 @@ function ensureConsent() {
 }
 ensureConsent();
 
-// ---------- Build feed ----------
+/* ===========================
+   Build feed
+   =========================== */
 const URLS = RAW_LIST.map(normalizeToUrl);
 shuffleInPlace(URLS);
 
@@ -1003,12 +1092,13 @@ const FEED = URLS.map((url, idx) => ({
   title: pickRandom(TITLE_BANK),
 }));
 
-// ---------- Tap Hint UI: controls show/hide ----------
+/* ===========================
+   Tap Hint UI
+   =========================== */
 let observer = null;
 let globalMuted = true;
 let lastTapAt = 0;
 let hintTimer = null;
-let activeVideoEl = null; // ✅ optimization: only pause previous active
 
 function showControls() {
   if (btnMute) btnMute.classList.remove("is-hidden");
@@ -1051,14 +1141,16 @@ if (btnMute) {
   btnMute.addEventListener("click", (e) => {
     e.stopPropagation();
     setMuteAll(!globalMuted);
-    hideControls();
-  }, { passive: false });
+    hideControls(); // bấm mute/unmute ẩn ngay
+  });
 }
 if (btnGift) {
-  btnGift.addEventListener("click", (e) => e.stopPropagation(), { passive: true });
+  btnGift.addEventListener("click", (e) => e.stopPropagation());
 }
 
-// ---------- Auto-next ----------
+/* ===========================
+   Auto-next
+   =========================== */
 function goNextFromSlide(slideEl) {
   const next = slideEl?.nextElementSibling;
   if (next && next.classList.contains("slide")) {
@@ -1066,7 +1158,9 @@ function goNextFromSlide(slideEl) {
   }
 }
 
-// ---------- Render ----------
+/* ===========================
+   Render
+   =========================== */
 function attachVideoSignals(video, slideEl) {
   video.addEventListener("pause", () => {
     showControls();
@@ -1092,13 +1186,8 @@ function render() {
     s.dataset.id = item.id;
     s.dataset.title = item.title;
 
-    // ✅ desktop uses .phone wrapper; mobile unaffected
-    // ✅ REMOVE loop so "ended" will fire for auto-next
-    s.innerHTML = `
-      <div class="phone">
-        <video playsinline muted preload="metadata" src="${item.url}"></video>
-      </div>
-    `;
+    // loop removed so ended fires
+    s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
 
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
@@ -1106,7 +1195,6 @@ function render() {
     // Tap slide:
     // - If paused -> play
     // - If playing -> (1st tap) show hint, (2nd tap quickly) pause
-/**
     s.addEventListener("click", () => {
       const video = s.querySelector("video");
       if (!video) return;
@@ -1126,32 +1214,8 @@ function render() {
       } else {
         showControlsBrief(1600);
       }
-    }, { passive: true });
-*/
-    const phone = s.querySelector(".phone");
-    
-    const onTap = () => {
-      const video = s.querySelector("video");
-      if (!video) return;
-    
-      if (video.paused) {
-        video.play().catch(() => {});
-        hideControls();
-        return;
-      }
-    
-      const t = now();
-      const dt = t - lastTapAt;
-      lastTapAt = t;
-    
-      if (dt < 320) video.pause();
-      else showControlsBrief(1600);
-    };
-    
-    (phone || s).addEventListener("pointerup", onTap, { passive: true });
-    // fallback
-    (phone || s).addEventListener("click", onTap, { passive: true });
-    
+    });
+
     feedEl.appendChild(s);
   });
 
@@ -1169,19 +1233,17 @@ function setupObserver() {
   if (observer) observer.disconnect();
 
   observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
+    entries.forEach(async (entry) => {
       const slide = entry.target;
       const video = slide.querySelector("video");
-      if (!video) continue;
+      if (!video) return;
 
       if (entry.isIntersecting) {
-        // ✅ Optimization: pause only previous active video (no querySelectorAll loop)
-        if (activeVideoEl && activeVideoEl !== video) {
-          activeVideoEl.pause();
-        }
-        activeVideoEl = video;
+        // pause others
+        document.querySelectorAll(".slide video").forEach(v => {
+          if (v !== video) v.pause();
+        });
 
-        // update active + seen + caption
         const id = slide.dataset.id || null;
         if (id && id !== session.activeVideoId) {
           session.activeVideoId = id;
@@ -1189,31 +1251,25 @@ function setupObserver() {
         }
         if (captionEl) captionEl.textContent = slide.dataset.title || "";
 
-        // autoplay
-        (async () => {
-          try {
-            video.muted = globalMuted;
-            await video.play();
-            hideControls();
-          } catch {
-            showControls();
-          }
-        })();
-      } else {
-        // only pause if this is the active video element
-        if (video === activeVideoEl) {
-          video.pause();
-        } else {
-          video.pause();
+        try {
+          video.muted = globalMuted;
+          await video.play();
+          hideControls();
+        } catch {
+          showControls();
         }
+      } else {
+        video.pause();
       }
-    }
+    });
   }, { root: feedEl, threshold: 0.66 });
 
   document.querySelectorAll(".slide").forEach(s => observer.observe(s));
 }
 
-// ---------- Send session on end ----------
+/* ===========================
+   Send session on end (after consent only)
+   =========================== */
 function buildSessionPayload() {
   const endedAt = now();
   session.endedAt = endedAt;
@@ -1223,6 +1279,8 @@ function buildSessionPayload() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([feedId, ms]) => ({ feedId, ms }));
+
+  const fp_light_hash = localStorage.getItem("fp_light_hash") || "";
 
   return {
     sid: session.sid,
@@ -1240,6 +1298,9 @@ function buildSessionPayload() {
     tz: session.tz,
     screen: session.screen,
     ua: session.ua,
+
+    // ✅ fp hash only (light)
+    fp_light_hash
   };
 }
 
@@ -1248,25 +1309,18 @@ function sendSession() {
   if (sent) return;
   sent = true;
 
+  // ✅ strictly only after consent
   if (localStorage.getItem("vid_analytics_ok") !== "1") return;
 
-//  const body = JSON.stringify(buildSessionPayload());
-
-//  if (navigator.sendBeacon) {
-//    const blob = new Blob([body], { type: "application/json" });
-//    navigator.sendBeacon(SESSION_ENDPOINT, blob);
-//    return;
-//  }
-
   const body = JSON.stringify(buildSessionPayload());
-  
-  // ✅ IMPORTANT: use text/plain to avoid CORS preflight for sendBeacon
+
+  // ✅ IMPORTANT: avoid preflight/ping CORS by using text/plain
   if (navigator.sendBeacon) {
     const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
     navigator.sendBeacon(SESSION_ENDPOINT, blob);
     return;
   }
-  
+
   fetch(SESSION_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1280,7 +1334,9 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") sendSession();
 });
 
-// ---------- Init ----------
+/* ===========================
+   Init
+   =========================== */
 render();
 setMuteAll(true);
-hideControls(); // start quiet
+hideControls();
