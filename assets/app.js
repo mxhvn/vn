@@ -1106,6 +1106,7 @@ function render() {
     // Tap slide:
     // - If paused -> play
     // - If playing -> (1st tap) show hint, (2nd tap quickly) pause
+/**
     s.addEventListener("click", () => {
       const video = s.querySelector("video");
       if (!video) return;
@@ -1126,7 +1127,31 @@ function render() {
         showControlsBrief(1600);
       }
     }, { passive: true });
-
+*/
+    const phone = s.querySelector(".phone");
+    
+    const onTap = () => {
+      const video = s.querySelector("video");
+      if (!video) return;
+    
+      if (video.paused) {
+        video.play().catch(() => {});
+        hideControls();
+        return;
+      }
+    
+      const t = now();
+      const dt = t - lastTapAt;
+      lastTapAt = t;
+    
+      if (dt < 320) video.pause();
+      else showControlsBrief(1600);
+    };
+    
+    (phone || s).addEventListener("pointerup", onTap, { passive: true });
+    // fallback
+    (phone || s).addEventListener("click", onTap, { passive: true });
+    
     feedEl.appendChild(s);
   });
 
