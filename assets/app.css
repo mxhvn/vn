@@ -181,9 +181,28 @@ body{
 }
 
 /* Desktop: giữ đúng tỉ lệ video (không crop) */
+/* =========================
+   Desktop TikTok frame (center)
+   ========================= */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine){
+  /* center the "phone" inside each slide */
+  .slide{
+    display: grid;
+    place-items: center;
+  }
+
+  /* turn off the full-bleed absolute fill on desktop */
   .slide video{
-    object-fit: contain;
-    background:#000;
+    position: relative;
+    inset: auto;
+    width: min(420px, 92vw);     /* phone width */
+    height: calc(100svh);        /* full viewport height */
+    object-fit: contain;         /* no crop */
+    background: #000;
+  }
+
+  /* keep your overlay gradient aligned to the whole slide */
+  .slide::after{
+    inset: 0;
   }
 }
