@@ -1,10 +1,15 @@
 /**
  * Seedance — FULL app.js (Tap Hint UI + Auto-Next + Analytics + Fingerprint light)
- * ✅ UPDATE:
- * - Video ID dựa vào _nc_gid (không dùng hash)
- * - RAW_LIST vẫn là string[]
- * - FEED shuffle thoải mái nhưng ID vẫn định vị được
- * - topWatch gửi kèm url/title để đọc Telegram dễ
+ * ✅ GUARANTEE FP:
+ * - Có stableStringify() встро sẵn (không phụ thuộc lib)
+ * - Sau khi user consent (Like), buildFingerprintLight() và:
+ *    (1) gửi ngay event "consent_ok" kèm fp_light + fp_light_hash
+ *    (2) lưu fp_light_hash vào localStorage để dùng lại cho các quick events / session summary
+ *    (3) (tuỳ chọn) cố gắng build lại fp_light nền sau consent đã có, nhưng không block UI
+ *
+ * Lưu ý:
+ * - "FP light" KHÔNG bao gồm canvas/webgl/audio/fonts. Chỉ UA/UA-CH + screen/viewport + prefs + net + deviceMemory/cores.
+ * - Nếu browser không hỗ trợ UA-CH high entropy hoặc Network Info => tự null (không lỗi).
  *
  * CORS note:
  * - summary sendBeacon dùng text/plain để hạn chế preflight
@@ -235,6 +240,7 @@ const TITLE_BANK = [
    Helpers
    =========================== */
 function normalizeToUrl(item) { return (item || "").toString().trim(); }
+
 function shuffleInPlace(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -244,6 +250,45 @@ function shuffleInPlace(arr) {
 }
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function now() { return Date.now(); }
+
+/** ✅ stableStringify: sort key để hash fingerprint ổn định */
+function stableStringify(value) {
+  const seen = new WeakSet();
+
+  function stringify(val) {
+    if (val === null) return "null";
+
+    const t = typeof val;
+    if (t === "number" || t === "boolean" || t === "string") return JSON.stringify(val);
+
+    if (val instanceof Date) return JSON.stringify(val.toISOString());
+
+    if (Array.isArray(val)) {
+      // giữ nguyên thứ tự array
+      return "[" + val.map(v => {
+        const s = stringify(v);
+        return s === undefined ? "null" : s;
+      }).join(",") + "]";
+    }
+
+    if (t === "object") {
+      if (seen.has(val)) return '"[Circular]"';
+      seen.add(val);
+
+      const keys = Object.keys(val)
+        .filter(k => val[k] !== undefined)
+        .sort();
+
+      const props = keys.map(k => JSON.stringify(k) + ":" + stringify(val[k]));
+      return "{" + props.join(",") + "}";
+    }
+
+    // function/symbol/undefined
+    return undefined;
+  }
+
+  return stringify(value);
+}
 
 function muteIcon(muted) {
   return muted
@@ -260,26 +305,16 @@ function muteIcon(muted) {
 /* ===========================
    Video ID based on _nc_gid
    =========================== */
-
-/** Lấy query param từ URL an toàn */
 function getQueryParam(url, key) {
   try {
     const u = new URL(url);
     return u.searchParams.get(key) || "";
   } catch {
-    // fallback regex nếu URL có ký tự lạ
     const m = String(url).match(new RegExp(`[?&]${key}=([^&]+)`));
     return m ? decodeURIComponent(m[1]) : "";
   }
 }
 
-/**
- * ID ưu tiên:
- * 1) _nc_gid
- * 2) oe (hạn dùng) -> vẫn khá dễ nhìn
- * 3) _nc_ohc (token) -> fallback
- * 4) cuối URL (ngắn) -> fallback cuối cùng
- */
 function stableVideoIdFromUrl(url) {
   const gid = getQueryParam(url, "_nc_gid");
   if (gid) return `vid_${gid}`;
@@ -290,13 +325,13 @@ function stableVideoIdFromUrl(url) {
   const ohc = getQueryParam(url, "_nc_ohc");
   if (ohc) return `vid_ohc_${ohc}`;
 
-  // fallback ngắn gọn
   const s = String(url);
   return `vid_${s.slice(-12).replace(/[^a-zA-Z0-9_]/g, "") || "unknown"}`;
 }
 
 /* ===========================
    Fingerprint (LIGHT) — after consent only
+   ✅ GUARANTEE: stableStringify đã có, sha256 ok, lưu hash vào localStorage
    =========================== */
 async function getUAHighEntropy() {
   try {
@@ -411,6 +446,19 @@ async function buildFingerprintLight() {
   return { fp_light: fp, fp_light_hash: hash };
 }
 
+/** Consent + FP cache */
+const CONSENT_KEY = "vid_analytics_ok";
+const FP_HASH_KEY = "vid_fp_light_hash";
+const FP_RAW_KEY  = "vid_fp_light_raw"; // optional cache (string) để debug; có thể xoá nếu không muốn
+function hasConsent() { return localStorage.getItem(CONSENT_KEY) === "1"; }
+function getFpHashCached() { return localStorage.getItem(FP_HASH_KEY) || ""; }
+function setFpCache(fpPack) {
+  if (!fpPack || !fpPack.fp_light_hash) return;
+  localStorage.setItem(FP_HASH_KEY, fpPack.fp_light_hash);
+  // optional: lưu raw để debug (cân nhắc privacy)
+  try { localStorage.setItem(FP_RAW_KEY, stableStringify(fpPack.fp_light)); } catch {}
+}
+
 /* ===========================
    DOM
    =========================== */
@@ -475,7 +523,10 @@ const session = {
   screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
   ua: (navigator.userAgent || "").slice(0, 220),
 
-  metaById: {} // { [feedId]: { url, title, nc_gid } }
+  metaById: {},
+
+  // ✅ fp state
+  fp_light_hash: getFpHashCached() || ""
 };
 
 function markVideoSeen(feedId) {
@@ -501,6 +552,7 @@ setInterval(tickWatchTime, 1000);
 
 /* ===========================
    Quick event sender
+   ✅ Always attach fp_light_hash if available after consent
    =========================== */
 function sendQuickEvent(eventName, extra = null) {
   const payload = {
@@ -514,6 +566,7 @@ function sendQuickEvent(eventName, extra = null) {
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
     screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
     ua: (navigator.userAgent || "").slice(0, 220),
+    fp_light_hash: session.fp_light_hash || getFpHashCached() || "",
     ...(extra && typeof extra === "object" ? extra : {})
   };
 
@@ -529,10 +582,34 @@ function sendQuickEvent(eventName, extra = null) {
 
 /* ===========================
    Consent Like
+   ✅ Guarantee: consent_ok luôn kèm FP (nếu build được)
    =========================== */
+async function ensureFpAfterConsent() {
+  // Chỉ chạy nếu đã consent mà chưa có fp hash cache
+  if (!hasConsent()) return null;
+  const cached = getFpHashCached();
+  if (cached) {
+    session.fp_light_hash = cached;
+    return { fp_light_hash: cached };
+  }
+
+  // Build và cache
+  try {
+    const fpPack = await buildFingerprintLight();
+    setFpCache(fpPack);
+    session.fp_light_hash = fpPack.fp_light_hash || "";
+    return fpPack;
+  } catch {
+    return null;
+  }
+}
+
 function ensureConsent() {
-  const key = "vid_analytics_ok";
-  if (localStorage.getItem(key) === "1") return true;
+  if (hasConsent()) {
+    // ✅ Nếu đã consent từ trước: cố gắng build fp nền (không ảnh hưởng UI)
+    ensureFpAfterConsent().catch(() => {});
+    return true;
+  }
 
   const bar = document.createElement("div");
   bar.style.cssText = `
@@ -568,14 +645,21 @@ function ensureConsent() {
   document.body.appendChild(bar);
 
   bar.querySelector("#vidOk").addEventListener("click", async () => {
-    localStorage.setItem(key, "1");
+    localStorage.setItem(CONSENT_KEY, "1");
 
+    // ✅ Build FP ngay sau click (user gesture), gửi kèm consent_ok
     let fpPack = null;
     try {
       fpPack = await buildFingerprintLight();
-    } catch {}
+      setFpCache(fpPack);
+      session.fp_light_hash = fpPack.fp_light_hash || "";
+    } catch {
+      fpPack = null;
+    }
 
-    sendQuickEvent("consent_ok", fpPack);
+    // Gửi event consent_ok (kèm fp nếu có)
+    sendQuickEvent("consent_ok", fpPack || {});
+
     bar.remove();
   });
 
@@ -592,8 +676,8 @@ function buildFeedFromRawList() {
   const urls = RAW_LIST.map(normalizeToUrl).filter(Boolean);
 
   const items = urls.map((url) => {
-    const id = stableVideoIdFromUrl(url);          // ✅ vid_<nc_gid>
-    const nc_gid = getQueryParam(url, "_nc_gid");  // để debug/telegram nếu muốn
+    const id = stableVideoIdFromUrl(url);
+    const nc_gid = getQueryParam(url, "_nc_gid");
     return { id, url, title: pickRandom(TITLE_BANK), nc_gid };
   });
 
@@ -692,7 +776,6 @@ function render() {
 
     s.innerHTML = `<video playsinline muted preload="metadata" src="${item.url}"></video>`;
 
-    // meta map (để summary đọc ra URL chính xác)
     session.metaById[item.id] = {
       url: item.url,
       title: item.title,
@@ -702,9 +785,6 @@ function render() {
     const v = s.querySelector("video");
     if (v) attachVideoSignals(v, s);
 
-    // Click behavior:
-    // - paused => play
-    // - playing => 1 tap show hint, 2 tap nhanh pause
     s.addEventListener("click", () => {
       const video = s.querySelector("video");
       if (!video) return;
@@ -774,6 +854,7 @@ function setupObserver() {
 
 /* ===========================
    Send session summary (after consent only)
+   ✅ Always include fp_light_hash if available
    =========================== */
 function buildSessionPayload() {
   const endedAt = now();
@@ -786,7 +867,7 @@ function buildSessionPayload() {
     .map(([feedId, ms]) => {
       const meta = session.metaById?.[feedId] || {};
       return {
-        feedId,                // vid_<nc_gid>
+        feedId,
         ms,
         nc_gid: meta.nc_gid || "",
         url: meta.url || "",
@@ -797,12 +878,16 @@ function buildSessionPayload() {
   return {
     sid: session.sid,
     uid: session.uid,
+    fp_light_hash: session.fp_light_hash || getFpHashCached() || "",
+
     startedAt: session.startedAt,
     endedAt: session.endedAt,
     durationMs: session.durationMs,
+
     videosSeen: session.videosSeen,
     videoIdsSeen: session.videoIdsSeen.slice(0, 50),
     topWatch: top,
+
     muted: !!session.muted,
     ref: session.ref,
     url: session.url,
@@ -818,7 +903,7 @@ function sendSession() {
   if (sent) return;
   sent = true;
 
-  if (localStorage.getItem("vid_analytics_ok") !== "1") return;
+  if (!hasConsent()) return;
 
   const body = JSON.stringify(buildSessionPayload());
 
@@ -849,4 +934,7 @@ document.addEventListener("visibilitychange", () => {
   render();
   setMuteAll(true);
   hideControls();
+
+  // ✅ Nếu user đã consent từ trước, đảm bảo có fp hash sớm nhất có thể
+  ensureFpAfterConsent().catch(() => {});
 })();
