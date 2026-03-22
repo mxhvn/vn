@@ -20,7 +20,7 @@ const SESSION_ENDPOINT = `${WORKER_BASE}/api/session`;
 
 /* KEEP YOUR VIDEO URLS */
 const RAW_LIST = [
-  "https://cdn.jsdelivr.net/gh/mxhvn/video-cdn@main/public/uploads/50namvesau-1774160453610.mp4",
+  "https://cdn.jsdelivr.net/gh/mxhvn/video-cdn@main/public/uploads/50namvesau-1774160636576.mp4",
  ];
 
 const TITLE_BANK = [
